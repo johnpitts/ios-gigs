@@ -119,8 +119,7 @@ class GigController {
             return
         }
         
-        let requestURL = baseURL
-            .appendingPathComponent("gigs")
+        let requestURL = baseURL.appendingPathComponent("gigs")
         
         var request = URLRequest(url: requestURL)
         
@@ -160,6 +159,42 @@ class GigController {
             }
             }.resume()
     }
+    
+    // write create gig func
+    func post(task: Task, completion: @escaping (Error?) -> Void) {
+
+        var requestURL = baseURL.appendingPathComponent("gigs")
+        
+        requestURL.appendPathExtension("json")
+        
+        var request = URLRequest(url: requestURL)
+        
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        
+        request.httpMethod = method.rawValue // "PUT" or "POST"
+        
+        do {
+            let jsonEncoder = JSONEncoder()
+            
+            request.httpBody = try jsonEncoder.encode(task) // Turns a Task -> Data
+        } catch {
+            NSLog("Error encoding task: \(error)")
+        }
+        
+        URLSession.shared.dataTask(with: request) { (data, _, error) in
+            
+            if let error = error {
+                NSLog("Error pushing Task to Firebase: \(error)")
+                completion(error)
+                return
+            }
+            
+            completion(nil)
+            
+            }.resume()
+    }
+    
     
     
     
