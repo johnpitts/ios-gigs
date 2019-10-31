@@ -35,23 +35,20 @@ class GigController {
         }
         
         URLSession.shared.dataTask(with: request) { (_, response, error) in
-            
             if let response = response as? HTTPURLResponse,
-                response.statusCode != 200 {
-                //then... Something went wrong
+                response.statusCode != 200 {                                 //then... Something went wrong
                 completion(NSError())
                 return
             }
-            
             if let error = error {
                 NSLog("Error signing up: \(error)")
                 completion(error)
                 return
             }
-            
             completion(nil)
             }.resume()
-    }
+    } // end signing UP
+    
     
     func logIn(with username: String, password: String, completion: @escaping (Error?) -> Void) {
         let requestURL = baseURL.appendingPathComponent("users/login")
@@ -63,7 +60,7 @@ class GigController {
         // The body of our request is JSON.
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        let user = User(username: username, password: password)
+        let user = User(username: username, password: password)                  // prepare the body before encoding
         
         do {
             request.httpBody = try JSONEncoder().encode(user)
@@ -81,15 +78,12 @@ class GigController {
                 completion(NSError())
                 return
             }
-            
             if let error = error {
                 NSLog("Error logging in: \(error)")
                 completion(error)
                 return
             }
-            
             // Get the bearer token by decoding it.
-            
             guard let data = data else {
                 NSLog("No data returned from data task")
                 completion(NSError())
@@ -98,10 +92,10 @@ class GigController {
             
             let decoder = JSONDecoder()
             do {
-                let bearer = try decoder.decode(Bearer.self, from: data) // this "bearer" is local const to the func
+                let bearer = try decoder.decode(Bearer.self, from: data)     // Bearer.self means a TYPE; .self says Bearer-type
                 
-                // We now have the bearer to authenticate the other requests
-                self.bearer = bearer                                    // whereas self.bearer sets the bearer property for class
+                // save the bearer to your model object instance
+                self.bearer = bearer
                 completion(nil)
             } catch {
                 NSLog("Error decoding Bearer: \(error)")
@@ -161,38 +155,72 @@ class GigController {
     }
     
     // write create gig func
-    func post(task: Task, completion: @escaping (Error?) -> Void) {
-
-        var requestURL = baseURL.appendingPathComponent("gigs")
+    func post(title: String, description: String, dueDate: Date, completion: @escaping (Result<Gig, NetworkError>) -> Void) {
         
-        requestURL.appendPathExtension("json")
+        guard let bearer = bearer else {
+            NSLog("No bearer token available")
+            completion(.failure(.noBearer))   //.failure is a property/method of Result & .noBearer is error name we created
+            return
+        }
+
+        let requestURL = baseURL.appendingPathComponent("gigs")  //changed var to let
         
         var request = URLRequest(url: requestURL)
         
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
+        request.httpMethod = HTTPMethod.post.rawValue
         
-        request.httpMethod = method.rawValue // "PUT" or "POST"
+        let gig = Gig(title: title, description: description, dueDate: dueDate)
         
         do {
             let jsonEncoder = JSONEncoder()
             
-            request.httpBody = try jsonEncoder.encode(task) // Turns a Task -> Data
+            request.httpBody = try jsonEncoder.encode(gig) // Turns a gig -> Data
         } catch {
             NSLog("Error encoding task: \(error)")
         }
         
-        URLSession.shared.dataTask(with: request) { (data, _, error) in
+        
+        // this whole call is dicked up!
+        
+        
+        
+        
+        
+        
+         request.setValue("Bearer \(bearer.token)", forHTTPHeaderField: "Authorization")   // in correct spot? bearer used.
+        
+        URLSession.shared.dataTask(with: request) { (data, response, error) in
             
-            if let error = error {
-                NSLog("Error pushing Task to Firebase: \(error)")
-                completion(error)
+            if let response = response as? HTTPURLResponse,
+                response.statusCode == 401 {                 // or you could write != 200
+                completion(Result.failure(.badAuth))        // can i get away with Result.failure long form here?
                 return
             }
             
-            completion(nil)
+            if let error = error {
+                NSLog("Error posting to api: \(error)")
+                completion(.failure(.apiError))
+                return
+            }
             
-            }.resume()
+            guard let data = data else {
+                completion(.failure(.noDataReturned))
+                return
+            };  print("gig going!")
+            
+            do {
+                let jsonDecoder = JSONDecoder()
+                let gigs = try jsonDecoder.decode([Gig].self, from: data)
+                self.gigs = gigs
+                completion(gigs, nil)
+                
+            } catch {
+                NSLog("Error decoding data from json to model [Gig] \(NSError())")
+                completion(nil, NSError)
+            }
+        }.resume()
     }
     
     
